@@ -38,6 +38,11 @@
 #include "filesys/fsutil.h"
 #endif
 
+/* ADDED */
+#include "lib/stdio.h" /* to define STDIN_FILENO in `read_line()` */
+#include "lib/user/syscall.c"
+
+
 /* Page directory with kernel mappings only. */
 uint32_t *init_page_dir;
 
@@ -72,6 +77,82 @@ static void locate_block_device (enum block_type, const char *name);
 
 int pintos_init (void) NO_RETURN;
 
+/* ===== ADDED ====== */
+static bool
+backspace(char** pos, char* line) 
+{
+  if (*pos > line) 
+    {
+      printf("\b \b");
+      (*pos)--;
+      return true;
+    }
+  else 
+    {
+      return false;
+    }
+}
+/* ---ADDED--- */
+static void
+read_line (char line[], size_t size) 
+{
+  char *pos = line;
+
+  /* `for(;;)` used to stay consistent to PintOS's coding style */
+  for (;;) 
+  {
+    char c;
+
+    if (intr_get_level() == INTR_ON)
+      intr_set_level(INTR_OFF); /* Calling `input_full()` requires this to be off */
+
+    if (!input_full()) 
+          c = input_getc();
+    else 
+      {
+        printf("Error: Max Input Character Count Exceeded!\n");
+        c = '\n';
+      }
+    if (intr_get_level() == INTR_OFF)
+      intr_set_level(INTR_ON);
+    
+
+    switch (c) 
+    {
+      case '\r':
+      case '\n':
+        *pos = '\0';
+        putchar ('\n');
+        return;
+      
+      case '\b':
+      case 0x7F:
+        /* 
+        Backspace character can sometimes be 0x8 or 0x7F (i.e. 127) 
+        Using '\b' checks for 0x8, but this didn't work, which is why I'm also
+        using 0x7F. In decimal these correspond to 8 and 127 respectively.
+        */
+        backspace(&pos, line);
+        break;
+      
+      case ('U' - 'A') + 1:
+        /* Corresponds to Ctrl+U. Clears entire user-entered line */
+        while (backspace(&pos, line))
+          continue;
+        break;
+      
+      default:
+        if (pos < line + size - 1) 
+        {
+          putchar(c);
+          *pos++ = c;
+        }
+        break;
+    }
+
+  }
+}
+/* ===== END-ADDED =====*/
 /* Pintos main entry point. */
 int
 pintos_init (void)
@@ -127,15 +208,98 @@ pintos_init (void)
   filesys_init (format_filesys);
 #endif
 
-  printf ("Boot complete.\n");
+  printf ("Boot complete!\n");
   
   if (*argv != NULL) {
     /* Run actions specified on kernel command line. */
     run_actions (argv);
   } else {
-    // TODO: no command line passed to kernel. Run interactively 
-  }
+    /* Initalize lock for the console already done above*/
 
+    /*
+    char prompt[] = "UserSaysWhat>"; /* For prompting. Passed to putbuf() from console.c * /
+    size_t prompt_length = strlen(prompt) + 1;
+    */
+
+    /* input_init(); */ /* Already called by pintos_init() above */
+    size_t size = 50;
+    char user_prompt[size];
+
+    /* 
+    for(;;) used below instead of while(1) or similar to stay consistent with 
+    PintOS's style..
+    */
+    for (;;) {
+      printf("CS2043>");
+
+      /* Obtain input from terminal */
+      read_line(user_prompt, size);
+
+      /* Now, 'user_prompt' contains prompt without newline */
+      /* We use an 'if-else ladder' to determine which action to take */
+
+      if (strcmp(user_prompt, "whoami") == 0)
+        {
+          /* WHOAMI */
+          printf("Kevin Fernando\t210161F\n");
+        }
+      else if (strcmp(user_prompt, "shutdown") == 0) 
+        {
+          /* SHUTDOWN PINTOS */
+          printf("Preparing to shutdown...\n");
+          shutdown_power_off();
+          return;          
+        }
+      else if (strcmp(user_prompt, "time") == 0) 
+        {
+          /* TIME SINCE UNIX EPOCH */
+          printf("Time Since Unix Epoch: %ul\n", rtc_get_time());
+        }
+      else if (strcmp(user_prompt, "ram") == 0)
+        {
+          /* RAM INFORMATION */
+          printf("RAM information: %ukB\n", init_ram_pages * PGSIZE / 1024);
+        }
+      else if (strcmp(user_prompt, "thread") == 0)
+        {
+          /* THREAD STATS */
+          printf("Retrieving thread statistics... \n");
+          thread_print_stats(); /* Implemented in ./thread.c */
+        }
+      else if (strcmp(user_prompt, "priority") == 0) 
+        {
+          /* THREAD PRIORITY */
+          printf("Current thread is: %s\n", thread_name());
+          printf("Priority of current thread is: ");
+
+          switch(thread_get_priority()) 
+            { /* As defined in 'thread.h' file */
+              case 1:
+                printf("Low Priority\n");
+                break;
+              case 31:
+                printf("Medium Priority\n");
+                break;
+              case 63:
+                printf("High Priority\n");
+                break;
+              default:
+                printf("Oh, NO! Unrecognized thready priority!\n");
+                break;
+            }
+        }
+      else if (strcmp(user_prompt, "exit") == 0) 
+        {
+          /* EXIT */
+          printf("Preparing to exit shell...\n");
+          break;
+        }
+      else 
+        {
+          printf("\"%s\" is an unrecognized command\n", user_prompt);
+        }
+    }
+  }
   /* Finish up. */
   shutdown ();
   thread_exit ();
