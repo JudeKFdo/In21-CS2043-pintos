@@ -1,4 +1,6 @@
-#include <syscall.h>
+/* #include <syscall.h> */ 
+/* Use below syscall.h instead of above. They refer to different files. Required is bottom one */
+#include "user/syscall.h"
 #include "../syscall-nr.h"
 
 /* Invokes syscall NUMBER, passing no arguments, and returns the

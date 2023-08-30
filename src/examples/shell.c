@@ -3,6 +3,10 @@
 #include <string.h>
 #include <syscall.h>
 
+/* ADDED */
+#include "src/lib/stdio.h" /* to define STDIN_FILENO in `read_line()` */
+#include "src/lib/user/syscall.h" /* to define EXIT_SUCCESS and PID_ERROR */
+
 static void read_line (char line[], size_t);
 static bool backspace (char **pos, char line[]);
 
